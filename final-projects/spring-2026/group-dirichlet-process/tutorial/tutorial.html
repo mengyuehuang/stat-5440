@@ -7578,17 +7578,16 @@ a.anchor-link {
 <span class="kn">from</span> <span class="nn">scipy.optimize</span> <span class="kn">import</span> <span class="n">linear_sum_assignment</span>
 <span class="kn">from</span> <span class="nn">sklearn.mixture</span> <span class="kn">import</span> <span class="n">GaussianMixture</span>
 
-<span class="c1"># ---------------------------------------------------------------</span>
-<span class="c1"># MODE controls how the notebook runs:</span>
-<span class="c1">#   "preloaded" : load saved MCMC results, regenerate figures only (~30s)</span>
-<span class="c1">#   "demo"      : fit on N=1000 subsample (~3-8 min, requires colab_bundle.npz)</span>
-<span class="c1">#   "full"      : fit on all 15,791 spikes (~4.5 hours, requires colab_bundle.npz)</span>
-<span class="c1"># ---------------------------------------------------------------</span>
+<span class="c1"># MODE controls execution path:</span>
+<span class="c1">#   "preloaded" - loads saved MCMC results from results/, regenerates figures (~30s)</span>
+<span class="c1">#   "demo"      - fits DP-GMM on N=1000 subsample (~3-8 min, needs data/colab_bundle.npz)</span>
+<span class="c1">#   "full"      - fits on all 15,791 spikes (~4.5 hours, needs data/colab_bundle.npz)</span>
 <span class="n">MODE</span> <span class="o">=</span> <span class="s2">"preloaded"</span>
 
+<span class="c1"># Seed chosen as the course number for reproducibility</span>
 <span class="n">SEED</span> <span class="o">=</span> <span class="mi">5440</span>
-<span class="n">K_MAX</span> <span class="o">=</span> <span class="mi">8</span>
-<span class="n">N_DIMS</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">K_MAX</span> <span class="o">=</span> <span class="mi">8</span>       <span class="c1"># truncation level for stick-breaking DP</span>
+<span class="n">N_DIMS</span> <span class="o">=</span> <span class="mi">2</span>      <span class="c1"># number of PCA dimensions used as features</span>
 <span class="n">FIG_DIR</span> <span class="o">=</span> <span class="s2">"figures"</span>
 <span class="n">RESULTS_DIR</span> <span class="o">=</span> <span class="s2">"results"</span>
 
@@ -7669,10 +7668,12 @@ a.anchor-link {
 <div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Before seeing any data, what cluster configurations does the DP prior generate?</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Prior predictive check: sample stick-breaking weights at different alpha</span>
+<span class="c1"># values and count how many clusters exceed a 5% weight threshold.</span>
+<span class="c1"># This shows what cluster counts the prior generates BEFORE seeing data.</span>
 <span class="n">alpha_values</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">]</span>
 <span class="n">n_prior_samples</span> <span class="o">=</span> <span class="mi">1000</span>
-<span class="n">K_trunc</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="n">K_trunc</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c1"># large truncation to avoid edge effects in the prior</span>
 
 <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">alpha_values</span><span class="p">),</span>
                           <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">3.5</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">alpha_values</span><span class="p">),</span> <span class="mf">3.5</span><span class="p">),</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -7680,12 +7681,14 @@ a.anchor-link {
 <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">alpha</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">alpha_values</span><span class="p">):</span>
     <span class="n">k_counts</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_prior_samples</span><span class="p">):</span>
+        <span class="c1"># Draw stick-breaking fractions and compute weights</span>
         <span class="n">v</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">K_trunc</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
         <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">K_trunc</span><span class="p">)</span>
         <span class="n">w</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">K_trunc</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
             <span class="n">w</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">v</span><span class="p">[:</span><span class="n">k</span><span class="p">])</span>
         <span class="n">w</span><span class="p">[</span><span class="n">K_trunc</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">w</span><span class="p">[:</span><span class="n">K_trunc</span> <span class="o">-</span> <span class="mi">1</span><span class="p">])</span>
+        <span class="c1"># Count components with weight above 5% threshold</span>
         <span class="n">k_active</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">w</span> <span class="o">&gt;</span> <span class="mf">0.05</span><span class="p">)</span>
         <span class="n">k_counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">k_active</span><span class="p">)</span>
 
@@ -7743,15 +7746,18 @@ a.anchor-link {
 <div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Stick-breaking visualization: how alpha controls cluster count</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Visualize the stick-breaking construction for three alpha values.</span>
+<span class="c1"># Each horizontal bar represents the unit stick partitioned into</span>
+<span class="c1"># mixture weights. Smaller alpha concentrates mass on fewer components.</span>
 <span class="n">alphas</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.3</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">]</span>
-<span class="n">K_draw</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="n">K_draw</span> <span class="o">=</span> <span class="mi">10</span>  <span class="c1"># number of components to draw</span>
 
 <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">alphas</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mf">2.5</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">alphas</span><span class="p">)))</span>
 <span class="n">colors</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">tab10</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">K_draw</span><span class="p">))</span>
 
 <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="n">alpha</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">alphas</span><span class="p">):</span>
     <span class="n">ax</span> <span class="o">=</span> <span class="n">axes</span><span class="p">[</span><span class="n">row</span><span class="p">]</span>
+    <span class="c1"># Draw Beta(1, alpha) fractions and compute stick-breaking weights</span>
     <span class="n">v</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">beta</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">K_draw</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">K_draw</span><span class="p">)</span>
     <span class="n">w</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
@@ -7759,6 +7765,7 @@ a.anchor-link {
         <span class="n">w</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">v</span><span class="p">[:</span><span class="n">k</span><span class="p">])</span>
     <span class="n">w</span><span class="p">[</span><span class="n">K_draw</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">w</span><span class="p">[:</span><span class="n">K_draw</span> <span class="o">-</span> <span class="mi">1</span><span class="p">])</span>
 
+    <span class="c1"># Plot as stacked horizontal bars</span>
     <span class="n">left</span> <span class="o">=</span> <span class="mf">0.0</span>
     <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">K_draw</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">w</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">0.005</span><span class="p">:</span>
@@ -7853,23 +7860,26 @@ $$y_i \mid z_i = k \sim \text{Normal}(\mu_k, \sigma_k)$$</p>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Load preprocessed data</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Utility functions for loading and saving pickle files</span>
 <span class="k">def</span> <span class="nf">load_pkl</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">directory</span><span class="o">=</span><span class="n">RESULTS_DIR</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Load a pickle file from the results directory."""</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.pkl"</span><span class="p">),</span> <span class="s2">"rb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
 
 <span class="k">def</span> <span class="nf">save_pkl</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">directory</span><span class="o">=</span><span class="n">RESULTS_DIR</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Save data as a pickle file to the results directory."""</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.pkl"</span><span class="p">),</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
         <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
 
+<span class="c1"># Load data based on MODE</span>
 <span class="k">if</span> <span class="n">MODE</span> <span class="o">==</span> <span class="s2">"preloaded"</span><span class="p">:</span>
-    <span class="c1"># Load previously saved data and results</span>
+    <span class="c1"># In preloaded mode, we skip MCMC and load saved posterior draws</span>
     <span class="n">data_used</span> <span class="o">=</span> <span class="n">load_pkl</span><span class="p">(</span><span class="s2">"data_used"</span><span class="p">)</span>
-    <span class="n">features</span> <span class="o">=</span> <span class="n">data_used</span><span class="p">[</span><span class="s1">'features'</span><span class="p">]</span>
-    <span class="n">spike_times</span> <span class="o">=</span> <span class="n">data_used</span><span class="p">[</span><span class="s1">'spike_times'</span><span class="p">]</span>
-    <span class="n">ic_spike_times</span> <span class="o">=</span> <span class="n">data_used</span><span class="p">[</span><span class="s1">'ic_spike_times'</span><span class="p">]</span>
+    <span class="n">features</span> <span class="o">=</span> <span class="n">data_used</span><span class="p">[</span><span class="s1">'features'</span><span class="p">]</span>       <span class="c1"># (15791, 2) z-scored PCA features</span>
+    <span class="n">spike_times</span> <span class="o">=</span> <span class="n">data_used</span><span class="p">[</span><span class="s1">'spike_times'</span><span class="p">]</span>  <span class="c1"># sample indices of detected spikes</span>
+    <span class="n">ic_spike_times</span> <span class="o">=</span> <span class="n">data_used</span><span class="p">[</span><span class="s1">'ic_spike_times'</span><span class="p">]</span>  <span class="c1"># intracellular ground truth</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="c1"># Load from original preprocessed file</span>
+    <span class="c1"># Load from the original preprocessed .npz file</span>
     <span class="n">bundle</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">"data"</span><span class="p">,</span> <span class="s2">"colab_bundle.npz"</span><span class="p">))</span>
     <span class="n">features</span> <span class="o">=</span> <span class="n">bundle</span><span class="p">[</span><span class="s1">'features_2d'</span><span class="p">]</span>
     <span class="n">spike_times</span> <span class="o">=</span> <span class="n">bundle</span><span class="p">[</span><span class="s1">'spike_times'</span><span class="p">]</span>
@@ -7881,7 +7891,7 @@ $$y_i \mid z_i = k \sim \text{Normal}(\mu_k, \sigma_k)$$</p>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Dataset: </span><span class="si">{</span><span class="n">N</span><span class="si">}</span><span class="s2"> spikes, </span><span class="si">{</span><span class="n">D</span><span class="si">}</span><span class="s2"> dimensions"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Ground truth: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ic_spike_times</span><span class="p">)</span><span class="si">}</span><span class="s2"> intracellular spikes"</span><span class="p">)</span>
 
-<span class="c1"># Visualize the raw feature space</span>
+<span class="c1"># Visualize the raw feature space before fitting</span>
 <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
 <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">features</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">features</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">s</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="s1">'steelblue'</span><span class="p">)</span>
 <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s2">"PC 1"</span><span class="p">)</span>
@@ -7934,58 +7944,69 @@ Ground truth: 12902 intracellular spikes
 <div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">STAN_CODE</span> <span class="o">=</span> <span class="s2">"""</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># Stan model: truncated stick-breaking DP-GMM with diagonal covariance.</span>
+<span class="c1">#</span>
+<span class="c1"># Key design choices:</span>
+<span class="c1">#   - Stick-breaking (Sethuraman 1994) for the DP truncation</span>
+<span class="c1">#   - Diagonal covariance (PCA decorrelates features; full covariance</span>
+<span class="c1">#     caused degenerate Cholesky factors for empty clusters)</span>
+<span class="c1">#   - Alpha estimated with Gamma(2,2) prior, not fixed</span>
+<span class="c1">#   - Discrete assignments z_i marginalized via log_sum_exp</span>
+<span class="c1">#     (Stan cannot sample discrete parameters)</span>
+<span class="c1">#   - n_active counts components with weight &gt; 5% for posterior over K</span>
+
+<span class="n">STAN_CODE</span> <span class="o">=</span> <span class="s2">"""</span>
 <span class="s2">data {</span>
-<span class="s2">  int&lt;lower=1&gt; N;</span>
-<span class="s2">  int&lt;lower=1&gt; D;</span>
-<span class="s2">  int&lt;lower=2&gt; K;</span>
-<span class="s2">  array[N] vector[D] y;</span>
+<span class="s2">  int&lt;lower=1&gt; N;                        // number of spikes</span>
+<span class="s2">  int&lt;lower=1&gt; D;                        // feature dimensions (2)</span>
+<span class="s2">  int&lt;lower=2&gt; K;                        // truncation level (K_max = 8)</span>
+<span class="s2">  array[N] vector[D] y;                  // observed spike features</span>
 <span class="s2">}</span>
 
 <span class="s2">parameters {</span>
-<span class="s2">  vector&lt;lower=0, upper=1&gt;[K - 1] v;   // stick-breaking fractions</span>
-<span class="s2">  array[K] vector[D] mu;                // component means</span>
-<span class="s2">  array[K] vector&lt;lower=0&gt;[D] sigma;   // component scales (diagonal)</span>
-<span class="s2">  real&lt;lower=0&gt; alpha;                  // concentration parameter</span>
+<span class="s2">  vector&lt;lower=0, upper=1&gt;[K - 1] v;     // stick-breaking fractions</span>
+<span class="s2">  array[K] vector[D] mu;                 // cluster means</span>
+<span class="s2">  array[K] vector&lt;lower=0&gt;[D] sigma;     // cluster scales (diagonal)</span>
+<span class="s2">  real&lt;lower=0&gt; alpha;                   // DP concentration parameter</span>
 <span class="s2">}</span>
 
 <span class="s2">transformed parameters {</span>
-<span class="s2">  simplex[K] w;                         // mixture weights via stick-breaking</span>
+<span class="s2">  simplex[K] w;                          // mixture weights</span>
 <span class="s2">  w[1] = v[1];</span>
 <span class="s2">  for (k in 2:(K - 1))</span>
 <span class="s2">    w[k] = v[k] * prod(1 - v[1:(k - 1)]);</span>
-<span class="s2">  w[K] = 1 - sum(w[1:(K - 1)]);</span>
+<span class="s2">  w[K] = 1 - sum(w[1:(K - 1)]);         // remainder to last component</span>
 <span class="s2">}</span>
 
 <span class="s2">model {</span>
 <span class="s2">  // Priors</span>
-<span class="s2">  alpha ~ gamma(2, 2);</span>
-<span class="s2">  v ~ beta(1, alpha);</span>
+<span class="s2">  alpha ~ gamma(2, 2);                   // weakly informative on concentration</span>
+<span class="s2">  v ~ beta(1, alpha);                    // stick-breaking fractions</span>
 <span class="s2">  for (k in 1:K) {</span>
-<span class="s2">    mu[k] ~ normal(0, 3);</span>
-<span class="s2">    sigma[k] ~ cauchy(0, 2);</span>
+<span class="s2">    mu[k] ~ normal(0, 3);               // covers z-scored feature range</span>
+<span class="s2">    sigma[k] ~ cauchy(0, 2);             // half-Cauchy on scales</span>
 <span class="s2">  }</span>
 
-<span class="s2">  // Likelihood: marginalize over discrete assignments z_i</span>
+<span class="s2">  // Likelihood: marginalize discrete assignments z_i</span>
 <span class="s2">  for (n in 1:N) {</span>
-<span class="s2">    vector[K] lps;</span>
+<span class="s2">    vector[K] lps;                       // log-probability per component</span>
 <span class="s2">    for (k in 1:K) {</span>
 <span class="s2">      lps[k] = log(w[k]);</span>
 <span class="s2">      for (d in 1:D)</span>
 <span class="s2">        lps[k] += normal_lpdf(y[n, d] | mu[k, d], sigma[k, d]);</span>
 <span class="s2">    }</span>
-<span class="s2">    target += log_sum_exp(lps);</span>
+<span class="s2">    target += log_sum_exp(lps);          // sum over all possible assignments</span>
 <span class="s2">  }</span>
 <span class="s2">}</span>
 
 <span class="s2">generated quantities {</span>
-<span class="s2">  int n_active = 0;</span>
+<span class="s2">  int n_active = 0;                      // count components with w &gt; 5%</span>
 <span class="s2">  for (k in 1:K) if (w[k] &gt; 0.05) n_active += 1;</span>
 <span class="s2">}</span>
 <span class="s2">"""</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"Stan model defined."</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Parameters: v (</span><span class="si">{</span><span class="n">K_MAX</span><span class="o">-</span><span class="mi">1</span><span class="si">}</span><span class="s2">), mu (</span><span class="si">{</span><span class="n">K_MAX</span><span class="si">}</span><span class="s2">x</span><span class="si">{</span><span class="n">N_DIMS</span><span class="si">}</span><span class="s2">), sigma (</span><span class="si">{</span><span class="n">K_MAX</span><span class="si">}</span><span class="s2">x</span><span class="si">{</span><span class="n">N_DIMS</span><span class="si">}</span><span class="s2">), alpha (1)"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Total: </span><span class="si">{</span><span class="n">K_MAX</span><span class="o">-</span><span class="mi">1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">K_MAX</span><span class="o">*</span><span class="n">N_DIMS</span><span class="o">*</span><span class="mi">2</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> parameters"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Total: </span><span class="si">{</span><span class="n">K_MAX</span><span class="o">-</span><span class="mi">1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">K_MAX</span><span class="o">*</span><span class="n">N_DIMS</span><span class="o">*</span><span class="mi">2</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> scalar parameters"</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -8000,7 +8021,7 @@ Ground truth: 12902 intracellular spikes
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>Stan model defined.
 Parameters: v (7), mu (8x2), sigma (8x2), alpha (1)
-Total: 40 parameters
+Total: 40 scalar parameters
 </pre>
 </div>
 </div>
@@ -8027,10 +8048,12 @@ Total: 40 parameters
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="k">if</span> <span class="n">MODE</span> <span class="o">==</span> <span class="s2">"preloaded"</span><span class="p">:</span>
+    <span class="c1"># Load pre-computed posterior draws and summary statistics.</span>
+    <span class="c1"># The full run took 4.5 hours on the complete dataset.</span>
     <span class="nb">print</span><span class="p">(</span><span class="s2">"Preloaded mode: loading saved MCMC results."</span><span class="p">)</span>
-    <span class="n">params</span> <span class="o">=</span> <span class="n">load_pkl</span><span class="p">(</span><span class="s2">"params_3chain"</span><span class="p">)</span>
-    <span class="n">summary</span> <span class="o">=</span> <span class="n">load_pkl</span><span class="p">(</span><span class="s2">"summary_3chain"</span><span class="p">)</span>
-    <span class="n">assignments</span> <span class="o">=</span> <span class="n">load_pkl</span><span class="p">(</span><span class="s2">"assignments_3chain"</span><span class="p">)</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="n">load_pkl</span><span class="p">(</span><span class="s2">"params_3chain"</span><span class="p">)</span>      <span class="c1"># aligned posterior draws (3 chains)</span>
+    <span class="n">summary</span> <span class="o">=</span> <span class="n">load_pkl</span><span class="p">(</span><span class="s2">"summary_3chain"</span><span class="p">)</span>    <span class="c1"># scalar summaries</span>
+    <span class="n">assignments</span> <span class="o">=</span> <span class="n">load_pkl</span><span class="p">(</span><span class="s2">"assignments_3chain"</span><span class="p">)</span>  <span class="c1"># z_map, confidence, z_probs</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Loaded: </span><span class="si">{</span><span class="n">params</span><span class="p">[</span><span class="s1">'mu'</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> chains x </span><span class="si">{</span><span class="n">params</span><span class="p">[</span><span class="s1">'mu'</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> draws"</span><span class="p">)</span>
 
 <span class="k">else</span><span class="p">:</span>
@@ -8044,7 +8067,7 @@ Total: 40 parameters
 
     <span class="n">model</span> <span class="o">=</span> <span class="n">CmdStanModel</span><span class="p">(</span><span class="n">stan_file</span><span class="o">=</span><span class="n">stan_file</span><span class="p">)</span>
 
-    <span class="c1"># Subsample for demo mode</span>
+    <span class="c1"># Configure MCMC based on mode</span>
     <span class="k">if</span> <span class="n">MODE</span> <span class="o">==</span> <span class="s2">"demo"</span><span class="p">:</span>
         <span class="n">SUB_N</span> <span class="o">=</span> <span class="mi">1000</span>
         <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">SUB_N</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
@@ -8070,10 +8093,10 @@ Total: 40 parameters
     <span class="n">elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t0</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Sampling completed in </span><span class="si">{</span><span class="n">elapsed</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s (</span><span class="si">{</span><span class="n">elapsed</span><span class="o">/</span><span class="mi">60</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> min)"</span><span class="p">)</span>
 
-    <span class="c1"># Print CmdStan diagnostics</span>
+    <span class="c1"># Print CmdStan diagnostics (divergences, treedepth, E-BFMI)</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">fit</span><span class="o">.</span><span class="n">diagnose</span><span class="p">())</span>
 
-    <span class="c1"># Extract and reshape parameters</span>
+    <span class="c1"># Extract posterior draws and reshape into (chains, draws, ...)</span>
     <span class="n">mu_raw</span> <span class="o">=</span> <span class="n">fit</span><span class="o">.</span><span class="n">stan_variable</span><span class="p">(</span><span class="s1">'mu'</span><span class="p">)</span>
     <span class="n">sigma_raw</span> <span class="o">=</span> <span class="n">fit</span><span class="o">.</span><span class="n">stan_variable</span><span class="p">(</span><span class="s1">'sigma'</span><span class="p">)</span>
     <span class="n">w_raw</span> <span class="o">=</span> <span class="n">fit</span><span class="o">.</span><span class="n">stan_variable</span><span class="p">(</span><span class="s1">'w'</span><span class="p">)</span>
@@ -8084,6 +8107,7 @@ Total: 40 parameters
     <span class="n">n_draws_per_chain</span> <span class="o">=</span> <span class="n">n_sampling</span>
 
     <span class="k">def</span> <span class="nf">split_chains</span><span class="p">(</span><span class="n">a</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Reshape flat draws into (n_chains, n_draws, ...) array."""</span>
         <span class="k">return</span> <span class="n">a</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n_chains</span><span class="p">,</span> <span class="n">n_draws_per_chain</span><span class="p">)</span> <span class="o">+</span> <span class="n">a</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
 
     <span class="n">params</span> <span class="o">=</span> <span class="p">{</span>
@@ -8134,14 +8158,21 @@ Loaded: 3 chains x 2000 draws
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">align_chains</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Align component labels across chains via Hungarian matching."""</span>
+<span class="w">    </span><span class="sd">"""Align component labels across chains via Hungarian matching.</span>
+<span class="sd">    </span>
+<span class="sd">    Different MCMC chains can assign different indices to the same</span>
+<span class="sd">    physical cluster (label switching). We fix this by finding the</span>
+<span class="sd">    permutation that minimizes the total distance between each chain's</span>
+<span class="sd">    posterior-mean cluster locations and a reference chain (chain 0).</span>
+<span class="sd">    """</span>
     <span class="n">mu</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">'mu'</span><span class="p">]</span>
     <span class="n">n_chains</span><span class="p">,</span> <span class="n">n_draws</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">D_local</span> <span class="o">=</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span>
-    <span class="n">anchor_means</span> <span class="o">=</span> <span class="n">mu</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-    <span class="n">perms</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">K</span><span class="p">)]</span>
+    <span class="n">anchor_means</span> <span class="o">=</span> <span class="n">mu</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># reference: chain 0 posterior means</span>
+    <span class="n">perms</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">K</span><span class="p">)]</span>  <span class="c1"># identity permutation for reference chain</span>
 
     <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_chains</span><span class="p">):</span>
         <span class="n">chain_means</span> <span class="o">=</span> <span class="n">mu</span><span class="p">[</span><span class="n">c</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="c1"># Cost matrix: pairwise distances between anchor and chain clusters</span>
         <span class="n">cost</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span>
             <span class="n">anchor_means</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">chain_means</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:],</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span>
         <span class="p">)</span>
@@ -8151,6 +8182,7 @@ Loaded: 3 chains x 2000 draws
         <span class="n">perms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">perm</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">apply_perm</span><span class="p">(</span><span class="n">arr</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Reorder component axis of each chain according to its permutation."""</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">arr</span><span class="p">[</span><span class="n">c</span><span class="p">][:,</span> <span class="n">perms</span><span class="p">[</span><span class="n">c</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_chains</span><span class="p">)])</span>
 
     <span class="k">return</span> <span class="p">{</span>
@@ -8162,11 +8194,16 @@ Loaded: 3 chains x 2000 draws
     <span class="p">}</span>
 
 <span class="k">def</span> <span class="nf">compute_z_probs</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">features_local</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Compute posterior assignment probabilities by averaging over all draws."""</span>
+<span class="w">    </span><span class="sd">"""Compute posterior assignment probabilities by averaging over all draws.</span>
+<span class="sd">    </span>
+<span class="sd">    For each spike i and component k, we compute p(z_i=k | y_i, theta_s)</span>
+<span class="sd">    at each posterior draw s, then average across draws to get the</span>
+<span class="sd">    Bayesian model-averaged assignment probability.</span>
+<span class="sd">    """</span>
     <span class="n">mu</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">'mu'</span><span class="p">]</span>
     <span class="n">sigma</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">'sigma'</span><span class="p">]</span>
     <span class="n">w</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">'w'</span><span class="p">]</span>
-    <span class="n">S_total</span> <span class="o">=</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">S_total</span> <span class="o">=</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># total posterior draws</span>
     <span class="n">N_local</span><span class="p">,</span> <span class="n">D_local</span> <span class="o">=</span> <span class="n">features_local</span><span class="o">.</span><span class="n">shape</span>
     <span class="n">K</span> <span class="o">=</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
 
@@ -8177,6 +8214,7 @@ Loaded: 3 chains x 2000 draws
     <span class="n">z_probs_sum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">N_local</span><span class="p">,</span> <span class="n">K</span><span class="p">))</span>
     <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
     <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">S_total</span><span class="p">):</span>
+        <span class="c1"># Log-probability of each spike under each component</span>
         <span class="n">log_p</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">N_local</span><span class="p">,</span> <span class="n">K</span><span class="p">))</span>
         <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">K</span><span class="p">):</span>
             <span class="n">log_p</span><span class="p">[:,</span> <span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">w_f</span><span class="p">[</span><span class="n">s</span><span class="p">,</span> <span class="n">k</span><span class="p">]</span> <span class="o">+</span> <span class="mf">1e-300</span><span class="p">)</span>
@@ -8184,6 +8222,7 @@ Loaded: 3 chains x 2000 draws
                 <span class="n">log_p</span><span class="p">[:,</span> <span class="n">k</span><span class="p">]</span> <span class="o">+=</span> <span class="n">norm</span><span class="o">.</span><span class="n">logpdf</span><span class="p">(</span>
                     <span class="n">features_local</span><span class="p">[:,</span> <span class="n">d</span><span class="p">],</span> <span class="n">loc</span><span class="o">=</span><span class="n">mu_f</span><span class="p">[</span><span class="n">s</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">d</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="n">sigma_f</span><span class="p">[</span><span class="n">s</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">d</span><span class="p">]</span>
                 <span class="p">)</span>
+        <span class="c1"># Normalize to probabilities via log-sum-exp</span>
         <span class="n">m</span> <span class="o">=</span> <span class="n">log_p</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">p</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_p</span> <span class="o">-</span> <span class="n">m</span><span class="p">)</span>
         <span class="n">p</span> <span class="o">/=</span> <span class="n">p</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -8208,8 +8247,8 @@ Loaded: 3 chains x 2000 draws
     <span class="n">assignments</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'z_probs'</span><span class="p">:</span> <span class="n">z_probs</span><span class="p">,</span> <span class="s1">'z_map'</span><span class="p">:</span> <span class="n">z_map</span><span class="p">,</span> <span class="s1">'confidence'</span><span class="p">:</span> <span class="n">confidence</span><span class="p">}</span>
     <span class="n">save_pkl</span><span class="p">(</span><span class="n">assignments</span><span class="p">,</span> <span class="s2">"assignments_3chain"</span><span class="p">)</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="n">z_map</span> <span class="o">=</span> <span class="n">assignments</span><span class="p">[</span><span class="s1">'z_map'</span><span class="p">]</span>
-    <span class="n">confidence</span> <span class="o">=</span> <span class="n">assignments</span><span class="p">[</span><span class="s1">'confidence'</span><span class="p">]</span>
+    <span class="n">z_map</span> <span class="o">=</span> <span class="n">assignments</span><span class="p">[</span><span class="s1">'z_map'</span><span class="p">]</span>           <span class="c1"># MAP cluster assignment per spike</span>
+    <span class="n">confidence</span> <span class="o">=</span> <span class="n">assignments</span><span class="p">[</span><span class="s1">'confidence'</span><span class="p">]</span> <span class="c1"># max p(z_i=k | y) per spike</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Assignments computed for </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">z_map</span><span class="p">)</span><span class="si">}</span><span class="s2"> spikes"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"High-confidence (&gt;0.7): </span><span class="si">{</span><span class="p">(</span><span class="n">confidence</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0.7</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">confidence</span><span class="p">)</span><span class="si">}</span><span class="s2"> "</span>
@@ -8531,7 +8570,7 @@ cluster  weight  mu_PC1  mu_PC2  sig_PC1  sig_PC2
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>/var/folders/g6/qyrrm6017k55qbd8_wywqxgw0000gn/T/ipykernel_38951/2508441574.py:6: MatplotlibDeprecationWarning: The 'labels' parameter of boxplot() has been renamed 'tick_labels' since Matplotlib 3.9; support for the old name will be dropped in 3.11.
+<pre>/var/folders/g6/qyrrm6017k55qbd8_wywqxgw0000gn/T/ipykernel_42524/2508441574.py:6: MatplotlibDeprecationWarning: The 'labels' parameter of boxplot() has been renamed 'tick_labels' since Matplotlib 3.9; support for the old name will be dropped in 3.11.
   bp = axes[0].boxplot([w_flat[:, k] for k in active_idx],
 </pre>
 </div>
@@ -8892,8 +8931,22 @@ But BIC uses MLE point estimates and provides no uncertainty on K.
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">validate_spikes</span><span class="p">(</span><span class="n">ec_times</span><span class="p">,</span> <span class="n">ic_times</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">fs</span><span class="o">=</span><span class="mi">20000</span><span class="p">,</span> <span class="n">tol_ms</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Match IC spikes to EC detections within tolerance."""</span>
-    <span class="n">tol</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">tol_ms</span> <span class="o">*</span> <span class="n">fs</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">"""Match intracellular (ground truth) spikes to extracellular detections.</span>
+<span class="sd">    </span>
+<span class="sd">    For each IC spike time, find the nearest EC detection within a</span>
+<span class="sd">    tolerance window. Return the cluster labels of matched spikes.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        ec_times: sample indices of extracellular detections</span>
+<span class="sd">        ic_times: sample indices of intracellular (ground truth) spikes</span>
+<span class="sd">        labels: cluster assignment for each EC detection</span>
+<span class="sd">        fs: sampling rate in Hz</span>
+<span class="sd">        tol_ms: matching tolerance in milliseconds</span>
+<span class="sd">    </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        Array of cluster labels for matched IC spikes</span>
+<span class="sd">    """</span>
+    <span class="n">tol</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">tol_ms</span> <span class="o">*</span> <span class="n">fs</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">)</span>  <span class="c1"># convert ms tolerance to samples</span>
     <span class="n">matched</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">ic_times</span><span class="p">:</span>
         <span class="n">diffs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">ec_times</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span>
@@ -8947,7 +9000,6 @@ the 30-minute recording and limited discriminability of 2D PCA features.
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p><a id="interpretation"></a></p>
 <h2 id="13.-Interpretation-and-Limitations">13. Interpretation and Limitations<a class="anchor-link" href="#13.-Interpretation-and-Limitations">¶</a></h2><h3 id="What-did-we-learn?">What did we learn?<a class="anchor-link" href="#What-did-we-learn?">¶</a></h3><p>The DP-GMM identifies <strong>6 putative neural populations</strong> (P(K=6) = 91.6%) from 15,791 detected spikes, with high assignment confidence (87.7% of spikes above 0.7). This result is robust to the choice of concentration parameter $\alpha$ across the range [0.5, 5.0], and is consistent with BIC-based model selection on the same data.</p>
 <p>The model provides full posterior uncertainty on K, cluster assignments, and all model parameters. This is a fundamental advantage over frequentist alternatives like EM-GMM, which return point estimates with no principled uncertainty quantification.</p>
 <h3 id="Limitations">Limitations<a class="anchor-link" href="#Limitations">¶</a></h3><ul>
@@ -8959,6 +9011,25 @@ the 30-minute recording and limited discriminability of 2D PCA features.
 <li><strong>Diagonal covariance:</strong> Cross-PC correlation is not modeled, though PCA decorrelation mitigates this.</li>
 </ul>
 <h3 id="When-to-use-DP-GMMs">When to use DP-GMMs<a class="anchor-link" href="#When-to-use-DP-GMMs">¶</a></h3><p>DP-GMMs are appropriate for moderate-dimensional clustering where K is genuinely unknown, when posterior uncertainty on K and assignments matters, and when a principled alternative to model selection over K is desired. They are less appropriate for very large datasets (where MCMC is prohibitive), for data with strong temporal or spatial dependencies, or when cluster shapes are highly non-Gaussian.</p>
+<h3 id="References">References<a class="anchor-link" href="#References">¶</a></h3><p><strong>Dataset:</strong> Henze, Harris, Borhegyi, Csicsvari et al., CRCNS hc-1, rat hippocampus CA1</p>
+<p><strong>DP Theory:</strong></p>
+<ul>
+<li>Sethuraman (1994), "A constructive definition of Dirichlet priors," <em>Statistica Sinica</em> 4(2), 639-650</li>
+<li>Teh (2017), "Dirichlet Process," <em>Encyclopedia of Machine Learning and Data Mining</em>, Springer</li>
+<li>Fr"uhwirth-Schnatter &amp; Malsiner-Walli (2019), "From here to infinity: sparse finite versus Dirichlet process mixtures," <em>Adv. Data Anal. Classif.</em> 13(1), 33-64</li>
+</ul>
+<p><strong>Spike Sorting:</strong></p>
+<ul>
+<li>Wood &amp; Black (2008), "A nonparametric Bayesian alternative to spike sorting," <em>J. Neuroscience Methods</em> 173(1), 1-12</li>
+<li>White, van Havre, Rousseau &amp; Mengersen (2020), "Bayesian spike sorting," in <em>Case Studies in Applied Bayesian Data Science</em>, Springer LNM 2259</li>
+<li>Quian Quiroga, Nadasdy &amp; Ben-Shaul (2004), "Unsupervised spike detection and sorting with wavelets and superparamagnetic clustering," <em>Neural Computation</em> 16(8), 1661-1687</li>
+</ul>
+<p><strong>Stan:</strong></p>
+<ul>
+<li>Betancourt (2017), "Identifying Bayesian Mixture Models," Stan Case Studies</li>
+<li>Lui, DP-GMM stick-breaking benchmark, luiarthur.github.io</li>
+<li>Stan Development Team, <em>Stan User's Guide</em>, finite mixtures chapter</li>
+</ul>
 </div>
 </div>
 </div>
